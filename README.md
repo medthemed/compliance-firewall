@@ -200,14 +200,17 @@ When a rule fires with `decision: redact`, matching payload fields are replaced 
 ```
 cf check <action.json> [--rules <rules.yaml>] [--config <cf.toml>]
          [--severity-threshold low|medium|high|critical] [--verbose]
+         [--format text|json]
     Evaluate an action file against a rules file.
     Exit codes: 0=allow, 1=block/consent, 3=redacted, 2=error
     --verbose prints the deciding rule, overridden matches, and a one-line
     explanation.
     --rules is optional when cf.toml or CF_RULES_PATH supplies a default.
+    --format json emits a stable machine-readable object for CI (see below).
 
 cf check-batch <actions-dir> [--rules <rules.yaml>] [--config <cf.toml>]
                [--severity-threshold low|medium|high|critical] [--verbose]
+               [--format text|json]
     Evaluate every *.json action file in a directory (non-recursive, sorted
     by filename). Prints one result block per file, then a summary grouped
     by decision. Individual parse failures are reported and the batch
@@ -250,6 +253,84 @@ cf check-batch examples/actions --rules examples/rules.yaml
 ```
 
 Exit code would be `1` because at least one action was blocked.
+
+### Machine-readable output
+
+`--format json` emits a single JSON object on stdout. Exit codes are
+unchanged. Errors that normally go to stderr appear as an `error` field.
+
+```bash
+cf check examples/actions/pii_export_us.json --rules examples/rules.yaml --format json
+```
+
+```json
+{
+  "schema_version": 1,
+  "command": "check",
+  "exit_code": 1,
+  "decision": "block",
+  "action_file": "examples/actions/pii_export_us.json",
+  "action": { "action_type": "data_export", "contains_pii": true },
+  "result": {
+    "decision": "block",
+    "explanation": "block by GDPR-ART44 (critical); overridden: CCPA-OPTEVENT (require_consent).",
+    "matched_rules": [],
+    "deciding_rule": "GDPR-ART44",
+    "overridden_rules": ["CCPA-OPTEVENT"],
+    "remediation_hints": ["Use an EU-based processor or obtain explicit consent under Art. 49(1)(a)."],
+    "redacted_payload": null
+  }
+}
+```
+
+`cf check-batch --format json` wraps the same per-file results with a summary:
+
+```json
+{
+  "schema_version": 1,
+  "command": "check-batch",
+  "exit_code": 1,
+  "directory": "examples/actions",
+  "summary": {"total": 5, "allow": 1, "block": 2, "redact": 1, "require_consent": 1, "errors": 0},
+  "results": [
+    {"action_file": "clean_action.json", "decision": "allow", "exit_code": 0, "result": {}}
+  ]
+}
+```
+
+`schema_version` is an integer. Additive fields may appear without a bump;
+breaking changes increment it.
+
+## JSON Schema
+
+Draft-07 schemas for action files and rule databases ship with the project:
+
+- [`schemas/action.schema.json`](schemas/action.schema.json)
+- [`schemas/rules.schema.json`](schemas/rules.schema.json)
+
+```python
+from compliance_firewall import (
+    ACTION_SCHEMA,
+    RULES_SCHEMA,
+    schema_path,
+    validate_action_data,
+    validate_rules_data,
+)
+
+# Documents for external validators (jsonschema, check-jsonschema, IDEs)
+print(ACTION_SCHEMA["$id"])
+print(schema_path("action"))  # filesystem path to the packaged schema
+
+# Lightweight stdlib validation (no jsonschema dependency)
+errors = validate_action_data({"action_type": "http_request"})
+assert errors == []
+```
+
+Validate a file with an external tool:
+
+```bash
+check-jsonschema --schemafile schemas/action.schema.json examples/actions/pii_export_us.json
+```
 
 ## Configuration
 

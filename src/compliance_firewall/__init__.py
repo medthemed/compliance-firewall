@@ -17,6 +17,8 @@ from .models import (
     MatchCondition,
     Rule,
     Severity,
+    decision_result_to_dict,
+    rule_to_dict,
 )
 from .proxy import (
     ActionBlockedError,
@@ -26,10 +28,18 @@ from .proxy import (
 )
 from .redact import REDACTED_PLACEHOLDER, redact_action, redact_payload
 from .rules import load_rules, load_rules_from_dict
+from .schemas import (
+    ACTION_SCHEMA,
+    RULES_SCHEMA,
+    schema_path,
+    validate_action_data,
+    validate_rules_data,
+)
 
 __version__ = "0.4.0"
 
 __all__ = [
+    "ACTION_SCHEMA",
     "Action",
     "ActionBlockedError",
     "ActionType",
@@ -42,8 +52,10 @@ __all__ = [
     "DecisionResult",
     "MatchCondition",
     "REDACTED_PLACEHOLDER",
+    "RULES_SCHEMA",
     "Rule",
     "Severity",
+    "decision_result_to_dict",
     "evaluate",
     "filter_rules_by_severity",
     "load_config",
@@ -53,4 +65,8 @@ __all__ = [
     "parse_severity",
     "redact_action",
     "redact_payload",
+    "rule_to_dict",
+    "schema_path",
+    "validate_action_data",
+    "validate_rules_data",
 ]

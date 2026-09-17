@@ -227,3 +227,41 @@ class DecisionResult:
             f"{r.id} ({r.decision.value})" for r in self.overridden_rules
         )
         return f"{head}; overridden: {overridden}."
+
+
+def rule_to_dict(rule: Rule) -> dict[str, Any]:
+    """Serialize a Rule to a plain dict suitable for JSON output."""
+    return {
+        "id": rule.id,
+        "jurisdiction": rule.jurisdiction,
+        "description": rule.description,
+        "decision": rule.decision.value,
+        "severity": rule.severity.value,
+        "citation": rule.citation,
+        "remediation": rule.remediation,
+        "priority": rule.priority,
+    }
+
+
+def decision_result_to_dict(result: DecisionResult) -> dict[str, Any]:
+    """Serialize a DecisionResult to a stable machine-readable dict.
+
+    The shape is versioned by the CLI ``schema_version`` field and is
+    intended for CI integrations. Field names are stable within a major
+    version of compliance-firewall.
+    """
+    redacted_payload: dict[str, Any] | None = None
+    if result.redacted_action is not None:
+        redacted_payload = dict(result.redacted_action.payload)
+
+    return {
+        "decision": result.decision.value,
+        "explanation": result.explain(),
+        "matched_rules": [rule_to_dict(r) for r in result.matched_rules],
+        "deciding_rule": (
+            result.deciding_rule.id if result.deciding_rule is not None else None
+        ),
+        "overridden_rules": [r.id for r in result.overridden_rules],
+        "remediation_hints": list(result.remediation_hints),
+        "redacted_payload": redacted_payload,
+    }
