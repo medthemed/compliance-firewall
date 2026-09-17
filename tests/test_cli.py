@@ -192,3 +192,90 @@ class TestCliNoArgs:
         assert exit_code == 0
         captured = capsys.readouterr()
         assert "check" in captured.out.lower() or "usage" in captured.out.lower()
+
+
+class TestCliVerboseExplanations:
+    """--verbose surfaces deciding rule and overridden matches."""
+
+    def test_verbose_marks_deciding_rule(self, tmp_path: Path, capsys):
+        rules = {
+            "rules": [
+                {
+                    "id": "BLOCK-R",
+                    "jurisdiction": "EU",
+                    "description": "Block PII to US",
+                    "match": {"contains_pii": True, "destination_regions": ["US"]},
+                    "decision": "block",
+                    "severity": "critical",
+                    "citation": "GDPR Art. 44",
+                    "priority": 100,
+                },
+                {
+                    "id": "REDACT-R",
+                    "jurisdiction": "GLOBAL",
+                    "description": "Would redact email",
+                    "match": {"data_categories": ["email"]},
+                    "decision": "redact",
+                    "severity": "medium",
+                    "citation": "POL-003",
+                    "priority": 10,
+                },
+            ]
+        }
+        rules_path = tmp_path / "rules.json"
+        rules_path.write_text(json.dumps(rules), encoding="utf-8")
+        action_path = tmp_path / "action.json"
+        action_path.write_text(
+            json.dumps(
+                {
+                    "action_type": "data_export",
+                    "destination_region": "US",
+                    "contains_pii": True,
+                    "data_categories": ["email"],
+                    "payload": {"email": "a@example.com"},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        code = main(["check", str(action_path), "--rules", str(rules_path), "--verbose"])
+        captured = capsys.readouterr()
+        assert code == 1
+        assert "Explanation:" in captured.out
+        assert "Deciding rule: BLOCK-R" in captured.out
+        assert "Overridden rules:" in captured.out
+        assert "REDACT-R proposed redact" in captured.out
+
+    def test_non_verbose_omits_explanation_block(self, tmp_path: Path, capsys):
+        rules = {
+            "rules": [
+                {
+                    "id": "BLOCK-R",
+                    "jurisdiction": "EU",
+                    "description": "Block",
+                    "match": {"contains_pii": True},
+                    "decision": "block",
+                    "severity": "critical",
+                    "citation": "X",
+                    "priority": 100,
+                }
+            ]
+        }
+        rules_path = tmp_path / "rules.json"
+        rules_path.write_text(json.dumps(rules), encoding="utf-8")
+        action_path = tmp_path / "action.json"
+        action_path.write_text(
+            json.dumps(
+                {
+                    "action_type": "data_export",
+                    "contains_pii": True,
+                    "payload": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        code = main(["check", str(action_path), "--rules", str(rules_path)])
+        captured = capsys.readouterr()
+        assert code == 1
+        assert "Explanation:" not in captured.out
+        assert "Deciding rule:" not in captured.out

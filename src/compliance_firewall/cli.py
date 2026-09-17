@@ -38,14 +38,31 @@ def _format_result(action: Action, result, *, verbose: bool = False) -> str:
     if result.matched_rules:
         lines.append(f"  Matched rules ({len(result.matched_rules)}):")
         for rule in result.matched_rules:
+            marker = "*" if result.deciding_rule is not None and rule.id == result.deciding_rule.id else "-"
             lines.append(
-                f"    - [{rule.severity.value}] {rule.id} "
+                f"    {marker} [{rule.severity.value}] {rule.id} "
                 f"({rule.jurisdiction}): {rule.description}"
             )
             if rule.citation:
-                lines.append(f"      Citation: {rule.citation}")
+                lines.append(f"        Citation: {rule.citation}")
     else:
         lines.append("  Matched rules: none")
+
+    if verbose:
+        lines.append(f"  Explanation: {result.explain()}")
+        if result.deciding_rule is not None:
+            lines.append(
+                f"  Deciding rule: {result.deciding_rule.id} "
+                f"→ {result.decision.value} "
+                f"({result.deciding_rule.severity.value})"
+            )
+        if result.overridden_rules:
+            lines.append("  Overridden rules:")
+            for rule in result.overridden_rules:
+                lines.append(
+                    f"    - {rule.id} proposed {rule.decision.value} "
+                    f"({rule.severity.value})"
+                )
 
     if result.remediation_hints:
         lines.append("  Remediation:")
