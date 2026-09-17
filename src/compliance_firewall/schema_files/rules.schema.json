@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/medthemed/compliance-firewall/schemas/rules.schema.json",
+  "title": "compliance-firewall Rule Database",
+  "description": "A rule database document with a top-level rules list.",
+  "type": "object",
+  "required": ["rules"],
+  "additionalProperties": true,
+  "properties": {
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/rule" },
+      "description": "Compliance rules, evaluated with most-restrictive-decision-wins semantics."
+    }
+  },
+  "definitions": {
+    "severity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["allow", "block", "redact", "require_consent"]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Conditions under which a rule applies. Unset fields are wildcards. All set fields are AND-ed.",
+      "properties": {
+        "action_types": {
+          "$ref": "#/definitions/stringArray",
+          "description": "Action types this rule applies to."
+        },
+        "destination_regions": {
+          "$ref": "#/definitions/stringArray",
+          "description": "Destination region codes this rule applies to."
+        },
+        "source_regions": {
+          "$ref": "#/definitions/stringArray",
+          "description": "Source/origin region codes this rule applies to."
+        },
+        "contains_pii": {
+          "type": "boolean",
+          "description": "When set, requires the action PII flag to equal this value."
+        },
+        "purposes": {
+          "$ref": "#/definitions/stringArray",
+          "description": "Declared purposes this rule applies to."
+        },
+        "data_categories": {
+          "$ref": "#/definitions/stringArray",
+          "description": "Matches when any listed category appears on the action."
+        },
+        "min_severity": {
+          "$ref": "#/definitions/severity",
+          "description": "Reserved for future use."
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "required": ["id", "jurisdiction", "decision", "severity"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique rule identifier."
+        },
+        "jurisdiction": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Legal jurisdiction (e.g. EU, US-CA, GLOBAL)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the rule."
+        },
+        "match": { "$ref": "#/definitions/match" },
+        "decision": { "$ref": "#/definitions/decision" },
+        "severity": { "$ref": "#/definitions/severity" },
+        "citation": {
+          "type": "string",
+          "description": "Legal citation or policy reference."
+        },
+        "remediation": {
+          "type": "string",
+          "description": "Hint text for resolving a violation."
+        },
+        "priority": {
+          "type": "integer",
+          "default": 0,
+          "description": "Higher priority rules take precedence when resolving the deciding rule."
+        }
+      }
+    }
+  }
+}

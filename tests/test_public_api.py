@@ -6,6 +6,7 @@ import compliance_firewall as cf
 
 
 EXPECTED_EXPORTS = {
+    "ACTION_SCHEMA",
     "Action",
     "ActionBlockedError",
     "ActionType",
@@ -18,8 +19,10 @@ EXPECTED_EXPORTS = {
     "DecisionResult",
     "MatchCondition",
     "REDACTED_PLACEHOLDER",
+    "RULES_SCHEMA",
     "Rule",
     "Severity",
+    "decision_result_to_dict",
     "evaluate",
     "filter_rules_by_severity",
     "load_config",
@@ -29,6 +32,10 @@ EXPECTED_EXPORTS = {
     "parse_severity",
     "redact_action",
     "redact_payload",
+    "rule_to_dict",
+    "schema_path",
+    "validate_action_data",
+    "validate_rules_data",
 }
 
 

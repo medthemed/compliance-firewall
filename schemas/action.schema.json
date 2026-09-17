@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/medthemed/compliance-firewall/schemas/action.schema.json",
+  "title": "compliance-firewall Action",
+  "description": "An agent intended action evaluated by compliance-firewall.",
+  "type": "object",
+  "required": ["action_type"],
+  "additionalProperties": false,
+  "properties": {
+    "action_type": {
+      "type": "string",
+      "enum": ["http_request", "db_query", "data_export", "tool_call"],
+      "description": "The kind of action being performed."
+    },
+    "destination_region": {
+      "type": "string",
+      "description": "ISO region code of the data destination (e.g. US, EU, CN). Empty means unspecified."
+    },
+    "source_region": {
+      "type": "string",
+      "description": "ISO region code where the data was collected. Empty means unspecified."
+    },
+    "contains_pii": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the payload contains personally identifiable information."
+    },
+    "purpose": {
+      "type": "string",
+      "description": "Declared purpose of the action (e.g. analytics, marketing, support)."
+    },
+    "data_categories": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Data categories involved (e.g. email, phone, health)."
+    },
+    "payload": {
+      "type": "object",
+      "default": {},
+      "description": "Arbitrary payload; matching keys are scrubbed on redact."
+    },
+    "actor": {
+      "type": "string",
+      "default": "",
+      "description": "Optional identifier of the agent or user performing the action."
+    }
+  }
+}
