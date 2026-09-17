@@ -174,6 +174,10 @@ class DecisionResult:
         remediation_hints: Aggregated remediation guidance from matched rules.
         action: The original action that was evaluated.
         redacted_action: Present only when decision is REDACT; contains scrubbed payload.
+        deciding_rule: The matched rule that produced the final decision.
+            None when no rules matched (implicit allow).
+        overridden_rules: Matched rules whose softer decisions lost to
+            ``deciding_rule``. Empty when every matched rule agreed.
     """
 
     decision: Decision
@@ -181,6 +185,8 @@ class DecisionResult:
     remediation_hints: tuple[str, ...]
     action: Action
     redacted_action: Action | None = None
+    deciding_rule: Rule | None = None
+    overridden_rules: tuple[Rule, ...] = ()
 
     @property
     def is_blocked(self) -> bool:
@@ -196,3 +202,28 @@ class DecisionResult:
     def requires_consent(self) -> bool:
         """True if the action requires explicit consent before proceeding."""
         return self.decision == Decision.REQUIRE_CONSENT
+
+    def explain(self) -> str:
+        """Return a one-line explanation of how the decision was reached.
+
+        Names the deciding rule and any overridden softer matches. Intended
+        for operator-facing logs and verbose CLI output.
+        """
+        if not self.matched_rules:
+            return "No rules matched; action allowed."
+
+        deciding = self.deciding_rule
+        if deciding is None:
+            return f"Decision: {self.decision.value}."
+
+        head = (
+            f"{self.decision.value} by {deciding.id} "
+            f"({deciding.severity.value})"
+        )
+        if not self.overridden_rules:
+            return f"{head}."
+
+        overridden = ", ".join(
+            f"{r.id} ({r.decision.value})" for r in self.overridden_rules
+        )
+        return f"{head}; overridden: {overridden}."
