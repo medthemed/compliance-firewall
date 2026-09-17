@@ -1,0 +1,14 @@
+{
+  "action_type": "data_export",
+  "destination_region": "US",
+  "contains_pii": true,
+  "purpose": "analytics",
+  "data_categories": ["email", "name", "phone"],
+  "payload": {
+    "email": "alice@example.com",
+    "name": "Alice Zhang",
+    "phone": "+1-555-0123",
+    "records": 150
+  },
+  "actor": "agent-export-01"
+}

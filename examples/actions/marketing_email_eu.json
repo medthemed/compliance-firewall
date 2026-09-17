@@ -1,0 +1,13 @@
+{
+  "action_type": "data_export",
+  "destination_region": "EU",
+  "contains_pii": true,
+  "purpose": "marketing",
+  "data_categories": ["email"],
+  "payload": {
+    "email": "bob@example.de",
+    "campaign": "spring-sale-2026",
+    "segment": "returning-users"
+  },
+  "actor": "agent-marketing"
+}

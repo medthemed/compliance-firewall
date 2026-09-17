@@ -1,0 +1,15 @@
+{
+  "action_type": "http_request",
+  "destination_region": "EU",
+  "contains_pii": false,
+  "purpose": "api_call",
+  "data_categories": [],
+  "payload": {
+    "url": "https://api.example.eu/v1/status",
+    "method": "GET",
+    "headers": {
+      "Accept": "application/json"
+    }
+  },
+  "actor": "agent-health-check"
+}

@@ -1,0 +1,14 @@
+{
+  "action_type": "tool_call",
+  "destination_region": "EU",
+  "contains_pii": true,
+  "purpose": "support",
+  "data_categories": ["phone"],
+  "payload": {
+    "tool": "crm_lookup",
+    "phone": "+49-30-123456",
+    "ticket_id": "SUP-4421",
+    "priority": "normal"
+  },
+  "actor": "agent-support-bot"
+}
