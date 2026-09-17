@@ -79,15 +79,18 @@ def _format_result(action: Action, result, *, verbose: bool = False) -> str:
     return "\n".join(lines)
 
 
-def cmd_check(args: argparse.Namespace) -> int:
-    """Handle the `cf check` subcommand."""
-    action_path = Path(args.action)
+def _resolve_rules(args: argparse.Namespace):
+    """Resolve config, rules path, and filtered rule list for a check command.
 
+    Returns:
+        ``(rules, error_exit_code)``. On failure, ``rules`` is None and the
+        second element is the process exit code (always 2).
+    """
     try:
         config = load_config(getattr(args, "config", None))
     except ConfigError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 2
+        return None, 2
 
     config = config.merged_with(
         rules_path=args.rules,
@@ -102,28 +105,17 @@ def cmd_check(args: argparse.Namespace) -> int:
             "or provide rules_path in cf.toml.",
             file=sys.stderr,
         )
-        return 2
-
-    if not action_path.exists():
-        print(f"Error: action file not found: {action_path}", file=sys.stderr)
-        return 2
+        return None, 2
 
     if not rules_path.exists():
         print(f"Error: rules file not found: {rules_path}", file=sys.stderr)
-        return 2
-
-    try:
-        action_data = json.loads(action_path.read_text(encoding="utf-8"))
-        action = Action.from_dict(action_data)
-    except (json.JSONDecodeError, KeyError, ValueError) as exc:
-        print(f"Error: failed to parse action file: {exc}", file=sys.stderr)
-        return 2
+        return None, 2
 
     try:
         rules = load_rules(rules_path)
     except Exception as exc:
         print(f"Error: failed to load rules: {exc}", file=sys.stderr)
-        return 2
+        return None, 2
 
     threshold = config.severity_threshold
     if threshold is not None:
@@ -135,13 +127,144 @@ def cmd_check(args: argparse.Namespace) -> int:
                 f"({before - len(rules)} rule(s) filtered out)"
             )
 
-    result = evaluate(action, rules)
-    print(_format_result(action, result, verbose=args.verbose))
+    return rules, 0
 
+
+def _exit_code_for_decision(result) -> int:
+    """Map a DecisionResult to the process exit code for a single check."""
     # Exit code: 0 = allow, 1 = blocked/consent, 3 = redacted
     if result.is_blocked or result.requires_consent:
         return 1
     if result.is_redacted:
+        return 3
+    return 0
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    """Handle the `cf check` subcommand."""
+    action_path = Path(args.action)
+
+    rules, err = _resolve_rules(args)
+    if rules is None:
+        return err
+
+    if not action_path.exists():
+        print(f"Error: action file not found: {action_path}", file=sys.stderr)
+        return 2
+
+    try:
+        action_data = json.loads(action_path.read_text(encoding="utf-8"))
+        action = Action.from_dict(action_data)
+    except (json.JSONDecodeError, KeyError, ValueError) as exc:
+        print(f"Error: failed to parse action file: {exc}", file=sys.stderr)
+        return 2
+
+    result = evaluate(action, rules)
+    print(_format_result(action, result, verbose=args.verbose))
+
+    return _exit_code_for_decision(result)
+
+
+# Decision order used when summarizing a batch (most restrictive first).
+_BATCH_DECISION_ORDER = (
+    Decision.BLOCK,
+    Decision.REQUIRE_CONSENT,
+    Decision.REDACT,
+    Decision.ALLOW,
+)
+
+
+def _discover_action_files(directory: Path) -> list[Path]:
+    """Return sorted non-recursive ``*.json`` files in ``directory``."""
+    return sorted(
+        p for p in directory.iterdir() if p.is_file() and p.suffix == ".json"
+    )
+
+
+def _format_batch_summary(
+    counts: dict[Decision, int], errors: int, total: int
+) -> str:
+    """Format the end-of-batch decision summary block."""
+    lines: list[str] = []
+    lines.append("=" * 40)
+    lines.append("  Batch summary")
+    lines.append("=" * 40)
+    lines.append(f"  Total files: {total}")
+    for decision in _BATCH_DECISION_ORDER:
+        lines.append(f"  {decision.value}: {counts.get(decision, 0)}")
+    if errors:
+        lines.append(f"  errors: {errors}")
+    return "\n".join(lines)
+
+
+def cmd_check_batch(args: argparse.Namespace) -> int:
+    """Handle the ``cf check-batch`` subcommand.
+
+    Evaluates every ``*.json`` action file in a directory and prints a
+    per-file result plus a summary grouped by decision.
+
+    Exit codes:
+
+    * 0 — every action evaluated to ``allow``
+    * 1 — at least one action is ``block`` or ``require_consent``
+    * 3 — at least one action is ``redact``, and none are block/consent
+    * 2 — config/rules error, empty/missing directory, or any parse failure
+    """
+    directory = Path(args.directory)
+
+    if not directory.exists():
+        print(f"Error: directory not found: {directory}", file=sys.stderr)
+        return 2
+    if not directory.is_dir():
+        print(f"Error: not a directory: {directory}", file=sys.stderr)
+        return 2
+
+    rules, err = _resolve_rules(args)
+    if rules is None:
+        return err
+
+    action_files = _discover_action_files(directory)
+    if not action_files:
+        print(
+            f"Error: no *.json action files found in {directory}",
+            file=sys.stderr,
+        )
+        return 2
+
+    counts: dict[Decision, int] = {d: 0 for d in Decision}
+    errors = 0
+    had_block_or_consent = False
+    had_redact = False
+
+    for action_path in action_files:
+        print(f"--- {action_path.name} ---")
+        try:
+            action_data = json.loads(action_path.read_text(encoding="utf-8"))
+            action = Action.from_dict(action_data)
+        except (json.JSONDecodeError, KeyError, ValueError) as exc:
+            errors += 1
+            print(f"  Error: failed to parse action file: {exc}")
+            print()
+            continue
+
+        result = evaluate(action, rules)
+        print(_format_result(action, result, verbose=args.verbose))
+        print()
+
+        counts[result.decision] += 1
+        if result.is_blocked or result.requires_consent:
+            had_block_or_consent = True
+        elif result.is_redacted:
+            had_redact = True
+
+    print(_format_batch_summary(counts, errors, len(action_files)))
+
+    # Parse failures mean the batch is incomplete — that outranks decision codes.
+    if errors:
+        return 2
+    if had_block_or_consent:
+        return 1
+    if had_redact:
         return 3
     return 0
 
@@ -326,6 +449,38 @@ def main(argv: list[str] | None = None) -> int:
         help="Show detailed output.",
     )
     check_parser.set_defaults(func=cmd_check)
+
+    # check-batch subcommand
+    batch_parser = subparsers.add_parser(
+        "check-batch",
+        help="Check a directory of action JSON files against a rules file.",
+    )
+    batch_parser.add_argument(
+        "directory",
+        help="Directory containing action JSON files (non-recursive *.json).",
+    )
+    batch_parser.add_argument(
+        "--rules",
+        default=None,
+        help="Path to rules YAML/JSON file. Falls back to cf.toml / CF_RULES_PATH.",
+    )
+    batch_parser.add_argument(
+        "--config",
+        default=None,
+        help="Path to a cf.toml config file. Auto-discovers cf.toml in cwd when omitted.",
+    )
+    batch_parser.add_argument(
+        "--severity-threshold",
+        default=None,
+        choices=["low", "medium", "high", "critical"],
+        help="Ignore rules below this severity (overrides config).",
+    )
+    batch_parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Show detailed output per action.",
+    )
+    batch_parser.set_defaults(func=cmd_check_batch)
 
     # serve-demo subcommand
     demo_parser = subparsers.add_parser(

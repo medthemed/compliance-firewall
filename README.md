@@ -206,9 +206,50 @@ cf check <action.json> [--rules <rules.yaml>] [--config <cf.toml>]
     explanation.
     --rules is optional when cf.toml or CF_RULES_PATH supplies a default.
 
+cf check-batch <actions-dir> [--rules <rules.yaml>] [--config <cf.toml>]
+               [--severity-threshold low|medium|high|critical] [--verbose]
+    Evaluate every *.json action file in a directory (non-recursive, sorted
+    by filename). Prints one result block per file, then a summary grouped
+    by decision. Individual parse failures are reported and the batch
+    continues; the process still exits 2 when any file fails to parse.
+    Exit codes:
+      0  every action evaluated to allow
+      1  at least one action is block or require_consent
+      3  at least one action is redact, and none are block/consent
+      2  config/rules error, empty or missing directory, or any parse failure
+    Most restrictive overall outcome wins (block/consent > redact > allow).
+
 cf serve-demo
     Run a self-contained demo with built-in scenarios (no network).
 ```
+
+### Batch example
+
+```bash
+cf check-batch examples/actions --rules examples/rules.yaml
+```
+
+```
+--- clean_action.json ---
+✓ Decision: ALLOW
+  ...
+--- marketing_email_eu.json ---
+⚠ Decision: REQUIRE_CONSENT
+  ...
+--- pii_export_us.json ---
+✗ Decision: BLOCK
+  ...
+========================================
+  Batch summary
+========================================
+  Total files: 5
+  allow: 1
+  block: 2
+  redact: 1
+  require_consent: 1
+```
+
+Exit code would be `1` because at least one action was blocked.
 
 ## Configuration
 
