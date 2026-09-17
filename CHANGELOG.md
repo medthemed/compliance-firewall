@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-19
+
+### Added
+- `cf check-batch <actions-dir>` evaluates every `*.json` action file in a
+  directory (non-recursive, sorted by filename)
+- Per-file result blocks plus a batch summary grouped by decision
+- Documented batch exit codes: 0 all allow, 1 any block/require_consent,
+  3 any redact without block/consent, 2 config/rules error, empty or
+  missing directory, or any parse failure
+- Individual parse failures are reported and the rest of the batch continues;
+  the process still exits 2 when any file fails to parse
+- Shared config/rules resolution helper used by both `cf check` and
+  `cf check-batch` (same `--rules`, `--config`, and `--severity-threshold`
+  behavior)
+
 ## [0.3.0] - 2026-09-18
 
 ### Added
