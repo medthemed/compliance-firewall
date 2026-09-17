@@ -10,8 +10,13 @@ from .models import (
     Rule,
     Severity,
 )
-from .proxy import ActionBlockedError, ComplianceProxy, ConsentRequiredError
-from .redact import redact_action, redact_payload
+from .proxy import (
+    ActionBlockedError,
+    ComplianceError,
+    ComplianceProxy,
+    ConsentRequiredError,
+)
+from .redact import REDACTED_PLACEHOLDER, redact_action, redact_payload
 from .rules import load_rules, load_rules_from_dict
 
 __version__ = "0.1.1"
@@ -20,11 +25,13 @@ __all__ = [
     "Action",
     "ActionBlockedError",
     "ActionType",
+    "ComplianceError",
     "ComplianceProxy",
     "ConsentRequiredError",
     "Decision",
     "DecisionResult",
     "MatchCondition",
+    "REDACTED_PLACEHOLDER",
     "Rule",
     "Severity",
     "evaluate",
