@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from .config import ConfigError, filter_rules_by_severity, load_config
 from .evaluate import evaluate
 from .models import Action, Decision
 from .rules import load_rules
@@ -81,7 +82,27 @@ def _format_result(action: Action, result, *, verbose: bool = False) -> str:
 def cmd_check(args: argparse.Namespace) -> int:
     """Handle the `cf check` subcommand."""
     action_path = Path(args.action)
-    rules_path = Path(args.rules)
+
+    try:
+        config = load_config(getattr(args, "config", None))
+    except ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    config = config.merged_with(
+        rules_path=args.rules,
+        severity_threshold=getattr(args, "severity_threshold", None),
+        source="cli",
+    )
+
+    rules_path = config.rules_path
+    if rules_path is None:
+        print(
+            "Error: no rules file specified. Pass --rules, set CF_RULES_PATH, "
+            "or provide rules_path in cf.toml.",
+            file=sys.stderr,
+        )
+        return 2
 
     if not action_path.exists():
         print(f"Error: action file not found: {action_path}", file=sys.stderr)
@@ -103,6 +124,16 @@ def cmd_check(args: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Error: failed to load rules: {exc}", file=sys.stderr)
         return 2
+
+    threshold = config.severity_threshold
+    if threshold is not None:
+        before = len(rules)
+        rules = filter_rules_by_severity(rules, threshold)
+        if getattr(args, "verbose", False):
+            print(
+                f"  Severity threshold: {threshold.value} "
+                f"({before - len(rules)} rule(s) filtered out)"
+            )
 
     result = evaluate(action, rules)
     print(_format_result(action, result, verbose=args.verbose))
@@ -275,8 +306,19 @@ def main(argv: list[str] | None = None) -> int:
     check_parser.add_argument("action", help="Path to action JSON file.")
     check_parser.add_argument(
         "--rules",
-        required=True,
-        help="Path to rules YAML/JSON file.",
+        default=None,
+        help="Path to rules YAML/JSON file. Falls back to cf.toml / CF_RULES_PATH.",
+    )
+    check_parser.add_argument(
+        "--config",
+        default=None,
+        help="Path to a cf.toml config file. Auto-discovers cf.toml in cwd when omitted.",
+    )
+    check_parser.add_argument(
+        "--severity-threshold",
+        default=None,
+        choices=["low", "medium", "high", "critical"],
+        help="Ignore rules below this severity (overrides config).",
     )
     check_parser.add_argument(
         "--verbose", "-v",

@@ -26,6 +26,7 @@ src/compliance_firewall/
 ├── __init__.py      # Public API re-exports
 ├── models.py        # Action, Rule, MatchCondition, DecisionResult, enums
 ├── rules.py         # Load rules from YAML/JSON files
+├── config.py        # cf.toml / env resolution and severity filtering
 ├── evaluate.py      # Pure function: Action + Rules → DecisionResult
 ├── redact.py        # Field-level PII scrubbing
 ├── proxy.py         # ComplianceProxy middleware wrapping an executor

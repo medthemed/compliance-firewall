@@ -279,3 +279,221 @@ class TestCliVerboseExplanations:
         assert code == 1
         assert "Explanation:" not in captured.out
         assert "Deciding rule:" not in captured.out
+
+
+class TestCliConfig:
+    """cf check --config / env / auto-discovery and severity threshold."""
+
+    def _write_rules(self, path: Path) -> Path:
+        data = {
+            "rules": [
+                {
+                    "id": "CRIT-BLOCK",
+                    "jurisdiction": "EU",
+                    "description": "Critical block",
+                    "match": {"contains_pii": True},
+                    "decision": "block",
+                    "severity": "critical",
+                    "citation": "GDPR",
+                    "priority": 100,
+                },
+                {
+                    "id": "LOW-REDACT",
+                    "jurisdiction": "GLOBAL",
+                    "description": "Low severity redact",
+                    "match": {"data_categories": ["phone"]},
+                    "decision": "redact",
+                    "severity": "low",
+                    "citation": "POL",
+                    "priority": 1,
+                },
+            ]
+        }
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return path
+
+    def _write_action(self, path: Path) -> Path:
+        path.write_text(
+            json.dumps(
+                {
+                    "action_type": "data_export",
+                    "contains_pii": True,
+                    "data_categories": ["phone"],
+                    "payload": {"phone": "+1"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        return path
+
+    def test_config_supplies_rules_path(self, tmp_path: Path, capsys):
+        rules_path = self._write_rules(tmp_path / "rules.json")
+        action_path = self._write_action(tmp_path / "action.json")
+        config_path = tmp_path / "cf.toml"
+        config_path.write_text(
+            f'rules_path = "{rules_path.as_posix()}"\n', encoding="utf-8"
+        )
+
+        code = main(["check", str(action_path), "--config", str(config_path)])
+        captured = capsys.readouterr()
+        # Without threshold, both rules apply; block wins
+        assert code == 1
+        assert "CRIT-BLOCK" in captured.out
+
+    def test_cli_rules_overrides_config(self, tmp_path: Path, capsys):
+        rules_a = self._write_rules(tmp_path / "a.json")
+        # Rules B only has the low redact rule
+        rules_b = tmp_path / "b.json"
+        rules_b.write_text(
+            json.dumps(
+                {
+                    "rules": [
+                        {
+                            "id": "ONLY-REDACT",
+                            "jurisdiction": "GLOBAL",
+                            "description": "Redact phone",
+                            "match": {"data_categories": ["phone"]},
+                            "decision": "redact",
+                            "severity": "low",
+                            "citation": "POL",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        action_path = self._write_action(tmp_path / "action.json")
+        config_path = tmp_path / "cf.toml"
+        config_path.write_text(
+            f'rules_path = "{rules_a.as_posix()}"\n', encoding="utf-8"
+        )
+
+        code = main(
+            [
+                "check",
+                str(action_path),
+                "--config",
+                str(config_path),
+                "--rules",
+                str(rules_b),
+            ]
+        )
+        captured = capsys.readouterr()
+        assert code == 3  # redact from B, not block from A
+        assert "ONLY-REDACT" in captured.out
+        assert "CRIT-BLOCK" not in captured.out
+
+    def test_env_rules_path(self, tmp_path: Path, capsys, monkeypatch):
+        rules_path = self._write_rules(tmp_path / "rules.json")
+        action_path = self._write_action(tmp_path / "action.json")
+        monkeypatch.setenv("CF_RULES_PATH", str(rules_path))
+        # Avoid picking up a stray cf.toml
+        monkeypatch.chdir(tmp_path)
+
+        code = main(["check", str(action_path)])
+        captured = capsys.readouterr()
+        assert code == 1
+        assert "CRIT-BLOCK" in captured.out
+
+    def test_autodiscovery_cf_toml(self, tmp_path: Path, capsys, monkeypatch):
+        rules_path = self._write_rules(tmp_path / "rules.json")
+        action_path = self._write_action(tmp_path / "action.json")
+        (tmp_path / "cf.toml").write_text(
+            f'rules_path = "{rules_path.as_posix()}"\n', encoding="utf-8"
+        )
+        monkeypatch.chdir(tmp_path)
+
+        code = main(["check", str(action_path)])
+        captured = capsys.readouterr()
+        assert code == 1
+        assert "CRIT-BLOCK" in captured.out
+
+    def test_severity_threshold_filters_low_rule(
+        self, tmp_path: Path, capsys
+    ):
+        rules_path = self._write_rules(tmp_path / "rules.json")
+        action_path = self._write_action(tmp_path / "action.json")
+
+        # High threshold: low-severity redact rule is dropped; critical block remains
+        code = main(
+            [
+                "check",
+                str(action_path),
+                "--rules",
+                str(rules_path),
+                "--severity-threshold",
+                "high",
+                "--verbose",
+            ]
+        )
+        captured = capsys.readouterr()
+        assert code == 1
+        assert "Severity threshold: high" in captured.out
+        assert "CRIT-BLOCK" in captured.out
+        assert "LOW-REDACT" not in captured.out
+
+    def test_severity_threshold_from_config(
+        self, tmp_path: Path, capsys, monkeypatch
+    ):
+        rules_path = self._write_rules(tmp_path / "rules.json")
+        action_path = self._write_action(tmp_path / "action.json")
+        (tmp_path / "cf.toml").write_text(
+            f'rules_path = "{rules_path.as_posix()}"\n'
+            'severity_threshold = "critical"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+
+        code = main(["check", str(action_path), "--verbose"])
+        captured = capsys.readouterr()
+        assert code == 1
+        assert "Severity threshold: critical" in captured.out
+        assert "LOW-REDACT" not in captured.out
+
+    def test_cli_threshold_overrides_config(
+        self, tmp_path: Path, capsys
+    ):
+        rules_path = self._write_rules(tmp_path / "rules.json")
+        action_path = self._write_action(tmp_path / "action.json")
+        config_path = tmp_path / "cf.toml"
+        config_path.write_text(
+            f'rules_path = "{rules_path.as_posix()}"\n'
+            'severity_threshold = "critical"\n',
+            encoding="utf-8",
+        )
+
+        # CLI asks for low threshold → nothing filtered
+        code = main(
+            [
+                "check",
+                str(action_path),
+                "--config",
+                str(config_path),
+                "--severity-threshold",
+                "low",
+                "--verbose",
+            ]
+        )
+        captured = capsys.readouterr()
+        assert code == 1
+        assert "Severity threshold: low" in captured.out
+        assert "LOW-REDACT" in captured.out
+
+    def test_missing_config_file_exits_2(self, tmp_path: Path, capsys):
+        action_path = self._write_action(tmp_path / "action.json")
+        code = main(
+            ["check", str(action_path), "--config", str(tmp_path / "missing.toml")]
+        )
+        captured = capsys.readouterr()
+        assert code == 2
+        assert "not found" in captured.err.lower()
+
+    def test_no_rules_anywhere_exits_2(self, tmp_path: Path, capsys, monkeypatch):
+        action_path = self._write_action(tmp_path / "action.json")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("CF_RULES_PATH", raising=False)
+        monkeypatch.delenv("CF_CONFIG", raising=False)
+        code = main(["check", str(action_path)])
+        captured = capsys.readouterr()
+        assert code == 2
+        assert "no rules file" in captured.err.lower()
