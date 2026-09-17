@@ -92,6 +92,7 @@ def redact_action(action: Action) -> Action:
     return Action(
         action_type=action.action_type,
         destination_region=action.destination_region,
+        source_region=action.source_region,
         contains_pii=False,  # PII has been removed
         purpose=action.purpose,
         data_categories=[],  # Categories no longer present

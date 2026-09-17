@@ -26,6 +26,8 @@ def _format_result(action: Action, result, *, verbose: bool = False) -> str:
 
     lines.append(f"{icon} Decision: {result.decision.value.upper()}")
     lines.append(f"  Action: {action.action_type.value}")
+    if action.source_region:
+        lines.append(f"  Source: {action.source_region}")
     if action.destination_region:
         lines.append(f"  Destination: {action.destination_region}")
     if action.purpose:

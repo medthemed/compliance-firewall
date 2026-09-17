@@ -66,8 +66,10 @@ rules:
 
   - id: CHINA-PIPL-LOCALIZE
     jurisdiction: CN
-    description: "PII must not be exported to non-local processors without a security assessment"
+    description: "PII collected in China must not be exported to non-local processors without a security assessment"
     match:
+      source_regions:
+        - CN
       destination_regions:
         - US
       contains_pii: true

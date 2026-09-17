@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project will be documented in this file.
 
@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+- `Action.source_region` field and `MatchCondition.source_regions` match condition
+  for origin-based jurisdiction rules (e.g. PIPL scoped to data collected in China)
+- Example action `pii_export_us_eu_origin.json` showing a non-China origin export
+- CLI now prints the source region when present
+
+### Changed
+- `CHINA-PIPL-LOCALIZE` example rule now matches on `source_regions: [CN]` so it
+  only fires for personal information collected in China
 
 ## [0.1.0] - 2026-09-16
 

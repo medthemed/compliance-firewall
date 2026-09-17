@@ -1,6 +1,7 @@
 {
   "action_type": "data_export",
   "destination_region": "US",
+  "source_region": "CN",
   "contains_pii": true,
   "purpose": "analytics",
   "data_categories": ["email", "name", "phone"],

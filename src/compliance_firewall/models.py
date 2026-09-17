@@ -41,6 +41,8 @@ class Action:
     Attributes:
         action_type: The kind of action being performed.
         destination_region: ISO region code of the data destination (e.g. "US", "EU", "CN").
+        source_region: ISO region code where the data was collected (e.g. "CN", "EU").
+            Used by origin-based laws such as PIPL; empty means unspecified.
         contains_pii: Whether the payload contains personally identifiable information.
         purpose: Declared purpose of the action (e.g. "analytics", "marketing", "support").
         data_categories: List of data categories involved (e.g. ["email", "phone", "health"]).
@@ -50,6 +52,7 @@ class Action:
 
     action_type: ActionType
     destination_region: str = ""
+    source_region: str = ""
     contains_pii: bool = False
     purpose: str = ""
     data_categories: list[str] = field(default_factory=list)
@@ -61,6 +64,7 @@ class Action:
         return {
             "action_type": self.action_type.value,
             "destination_region": self.destination_region,
+            "source_region": self.source_region,
             "contains_pii": self.contains_pii,
             "purpose": self.purpose,
             "data_categories": list(self.data_categories),
@@ -74,6 +78,7 @@ class Action:
         return cls(
             action_type=ActionType(data["action_type"]),
             destination_region=data.get("destination_region", ""),
+            source_region=data.get("source_region", ""),
             contains_pii=bool(data.get("contains_pii", False)),
             purpose=data.get("purpose", ""),
             data_categories=list(data.get("data_categories", [])),
@@ -92,6 +97,7 @@ class MatchCondition:
 
     action_types: tuple[str, ...] | None = None
     destination_regions: tuple[str, ...] | None = None
+    source_regions: tuple[str, ...] | None = None
     contains_pii: bool | None = None
     purposes: tuple[str, ...] | None = None
     data_categories: tuple[str, ...] | None = None
@@ -105,6 +111,10 @@ class MatchCondition:
 
         if self.destination_regions is not None:
             if action.destination_region not in self.destination_regions:
+                return False
+
+        if self.source_regions is not None:
+            if action.source_region not in self.source_regions:
                 return False
 
         if self.contains_pii is not None:

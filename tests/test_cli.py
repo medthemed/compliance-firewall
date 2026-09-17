@@ -93,6 +93,84 @@ class TestCliCheck:
         captured = capsys.readouterr()
         assert "not found" in captured.err.lower()
 
+    def test_check_shows_source_region(self, tmp_path: Path, capsys):
+        rules = {
+            "rules": [
+                {
+                    "id": "PIPL-38",
+                    "jurisdiction": "CN",
+                    "description": "PII collected in China must not leave",
+                    "match": {
+                        "source_regions": ["CN"],
+                        "destination_regions": ["US"],
+                        "contains_pii": True,
+                    },
+                    "decision": "block",
+                    "severity": "critical",
+                    "citation": "PIPL Art. 38",
+                    "priority": 90,
+                }
+            ]
+        }
+        rules_path = tmp_path / "rules.json"
+        rules_path.write_text(json.dumps(rules), encoding="utf-8")
+
+        action = {
+            "action_type": "data_export",
+            "destination_region": "US",
+            "source_region": "CN",
+            "contains_pii": True,
+            "data_categories": ["email"],
+            "payload": {"email": "a@example.cn"},
+        }
+        action_path = tmp_path / "action.json"
+        action_path.write_text(json.dumps(action), encoding="utf-8")
+
+        exit_code = main(["check", str(action_path), "--rules", str(rules_path)])
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "Source: CN" in captured.out
+        assert "PIPL-38" in captured.out
+
+    def test_check_eu_origin_not_matched_by_pipl(self, tmp_path: Path, capsys):
+        rules = {
+            "rules": [
+                {
+                    "id": "PIPL-38",
+                    "jurisdiction": "CN",
+                    "description": "PII collected in China must not leave",
+                    "match": {
+                        "source_regions": ["CN"],
+                        "destination_regions": ["US"],
+                        "contains_pii": True,
+                    },
+                    "decision": "block",
+                    "severity": "critical",
+                    "citation": "PIPL Art. 38",
+                    "priority": 90,
+                }
+            ]
+        }
+        rules_path = tmp_path / "rules.json"
+        rules_path.write_text(json.dumps(rules), encoding="utf-8")
+
+        action = {
+            "action_type": "data_export",
+            "destination_region": "US",
+            "source_region": "EU",
+            "contains_pii": True,
+            "data_categories": ["email"],
+            "payload": {"email": "b@example.de"},
+        }
+        action_path = tmp_path / "action.json"
+        action_path.write_text(json.dumps(action), encoding="utf-8")
+
+        exit_code = main(["check", str(action_path), "--rules", str(rules_path)])
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "ALLOW" in captured.out.upper()
+        assert "PIPL-38" not in captured.out
+
 
 class TestCliDemo:
     """cf serve-demo subcommand."""

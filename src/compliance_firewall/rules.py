@@ -17,6 +17,9 @@ def _parse_match(data: dict[str, Any]) -> MatchCondition:
         destination_regions=(
             tuple(data["destination_regions"]) if "destination_regions" in data else None
         ),
+        source_regions=(
+            tuple(data["source_regions"]) if "source_regions" in data else None
+        ),
         contains_pii=data.get("contains_pii"),
         purposes=tuple(data["purposes"]) if "purposes" in data else None,
         data_categories=(
