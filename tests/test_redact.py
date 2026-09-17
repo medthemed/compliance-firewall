@@ -95,6 +95,7 @@ class TestRedactAction:
         action = Action(
             action_type=ActionType.DATA_EXPORT,
             destination_region="US",
+            source_region="CN",
             contains_pii=True,
             purpose="analytics",
             data_categories=["email"],
@@ -104,6 +105,7 @@ class TestRedactAction:
         redacted = redact_action(action)
         assert redacted.action_type == ActionType.DATA_EXPORT
         assert redacted.destination_region == "US"
+        assert redacted.source_region == "CN"
         assert redacted.purpose == "analytics"
         assert redacted.actor == "agent-2"
 

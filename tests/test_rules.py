@@ -65,6 +65,7 @@ class TestLoadFromDict:
                     "match": {
                         "action_types": ["http_request", "db_query"],
                         "destination_regions": ["US", "CN"],
+                        "source_regions": ["CN", "RU"],
                         "data_categories": ["email", "phone"],
                         "purposes": ["marketing"],
                     },
@@ -77,8 +78,26 @@ class TestLoadFromDict:
         rules = load_rules_from_dict(data)
         assert rules[0].match.action_types == ("http_request", "db_query")
         assert rules[0].match.destination_regions == ("US", "CN")
+        assert rules[0].match.source_regions == ("CN", "RU")
         assert rules[0].match.data_categories == ("email", "phone")
         assert rules[0].match.purposes == ("marketing",)
+
+    def test_source_regions_defaults_to_none(self):
+        data = {
+            "rules": [
+                {
+                    "id": "R1",
+                    "jurisdiction": "EU",
+                    "description": "",
+                    "match": {"contains_pii": True},
+                    "decision": "block",
+                    "severity": "high",
+                    "citation": "",
+                }
+            ]
+        }
+        rules = load_rules_from_dict(data)
+        assert rules[0].match.source_regions is None
 
     def test_empty_rules(self):
         rules = load_rules_from_dict({"rules": []})
@@ -143,6 +162,36 @@ rules:
         # Should be sorted by priority desc
         priorities = [r.priority for r in rules]
         assert priorities == sorted(priorities, reverse=True)
+
+    def test_load_yaml_with_source_regions(self, tmp_path: Path):
+        yaml_text = """
+rules:
+  - id: PIPL-38
+    jurisdiction: CN
+    description: "PIPL origin rule"
+    match:
+      source_regions:
+        - CN
+      destination_regions:
+        - US
+      contains_pii: true
+    decision: block
+    severity: critical
+    citation: "PIPL Art. 38"
+    priority: 90
+"""
+        path = tmp_path / "rules.yaml"
+        path.write_text(yaml_text, encoding="utf-8")
+        rules = load_rules(path)
+        assert len(rules) == 1
+        assert rules[0].match.source_regions == ("CN",)
+        assert rules[0].match.destination_regions == ("US",)
+
+    def test_examples_pipl_rule_has_source_regions(self):
+        examples_path = Path(__file__).parent.parent / "examples" / "rules.yaml"
+        rules = load_rules(examples_path)
+        pipl = next(r for r in rules if r.id == "CHINA-PIPL-LOCALIZE")
+        assert pipl.match.source_regions == ("CN",)
 
 
 class TestMatchCondition:

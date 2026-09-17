@@ -266,3 +266,114 @@ class TestActionTypeMatching:
         rules = [_make_rule(action_types=("db_query", "data_export"))]
         result = evaluate(action, rules)
         assert result.is_blocked
+
+
+class TestSourceRegionMatching:
+    """Origin-based jurisdiction matching via source_regions."""
+
+    def _pipl_rule(self) -> Rule:
+        return Rule(
+            id="CHINA-PIPL-LOCALIZE",
+            jurisdiction="CN",
+            description="PII collected in China must not leave without assessment",
+            match=MatchCondition(
+                source_regions=("CN",),
+                destination_regions=("US",),
+                contains_pii=True,
+            ),
+            decision=Decision.BLOCK,
+            severity=Severity.CRITICAL,
+            citation="PIPL Art. 38",
+            remediation="Complete a CAC security assessment.",
+            priority=90,
+        )
+
+    def test_pipl_blocks_china_origin_pii_to_us(self):
+        action = Action(
+            action_type=ActionType.DATA_EXPORT,
+            destination_region="US",
+            source_region="CN",
+            contains_pii=True,
+            data_categories=["email"],
+        )
+        result = evaluate(action, [self._pipl_rule()])
+        assert result.is_blocked
+        assert result.matched_rules[0].id == "CHINA-PIPL-LOCALIZE"
+
+    def test_pipl_allows_non_china_origin_pii_to_us(self):
+        action = Action(
+            action_type=ActionType.DATA_EXPORT,
+            destination_region="US",
+            source_region="EU",
+            contains_pii=True,
+            data_categories=["email"],
+        )
+        result = evaluate(action, [self._pipl_rule()])
+        assert result.decision == Decision.ALLOW
+        assert len(result.matched_rules) == 0
+
+    def test_pipl_allows_unspecified_source(self):
+        action = Action(
+            action_type=ActionType.DATA_EXPORT,
+            destination_region="US",
+            contains_pii=True,
+            data_categories=["email"],
+        )
+        result = evaluate(action, [self._pipl_rule()])
+        assert result.decision == Decision.ALLOW
+
+    def test_pipl_allows_china_origin_to_adequate_region(self):
+        action = Action(
+            action_type=ActionType.DATA_EXPORT,
+            destination_region="EU",
+            source_region="CN",
+            contains_pii=True,
+            data_categories=["email"],
+        )
+        result = evaluate(action, [self._pipl_rule()])
+        assert result.decision == Decision.ALLOW
+
+    def test_gdpr_and_pipl_both_match_china_origin(self):
+        gdpr = _make_rule(
+            id="GDPR-ART44",
+            decision=Decision.BLOCK,
+            destination_regions=("US", "CN", "RU", "IN"),
+            contains_pii=True,
+        )
+        action = Action(
+            action_type=ActionType.DATA_EXPORT,
+            destination_region="US",
+            source_region="CN",
+            contains_pii=True,
+        )
+        result = evaluate(action, [gdpr, self._pipl_rule()])
+        assert result.is_blocked
+        matched_ids = [r.id for r in result.matched_rules]
+        assert "GDPR-ART44" in matched_ids
+        assert "CHINA-PIPL-LOCALIZE" in matched_ids
+
+    def test_redact_preserves_source_region(self):
+        action = Action(
+            action_type=ActionType.TOOL_CALL,
+            source_region="CN",
+            contains_pii=True,
+            data_categories=["phone"],
+            payload={"phone": "+86-138-0000"},
+        )
+        rules = [
+            Rule(
+                id="REDACT-PHONE",
+                jurisdiction="GLOBAL",
+                description="Redact phone",
+                match=MatchCondition(data_categories=("phone",)),
+                decision=Decision.REDACT,
+                severity=Severity.MEDIUM,
+                citation="POL-003",
+                remediation="Strip phone",
+                priority=10,
+            )
+        ]
+        result = evaluate(action, rules)
+        assert result.is_redacted
+        assert result.redacted_action is not None
+        assert result.redacted_action.source_region == "CN"
