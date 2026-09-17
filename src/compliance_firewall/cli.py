@@ -6,11 +6,34 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from .config import ConfigError, filter_rules_by_severity, load_config
 from .evaluate import evaluate
-from .models import Action, Decision
+from .models import Action, Decision, decision_result_to_dict
 from .rules import load_rules
+
+# Stable machine-output envelope version. Increment only on breaking changes
+# to the JSON CLI contract; additive fields are allowed without a bump.
+SCHEMA_VERSION = 1
+
+
+def _wants_json(args: argparse.Namespace) -> bool:
+    return getattr(args, "format", "text") == "json"
+
+
+def _emit_json(payload: dict[str, Any]) -> None:
+    print(json.dumps(payload, indent=2, sort_keys=False))
+
+
+def _json_envelope(command: str, exit_code: int, **fields: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "command": command,
+        "exit_code": exit_code,
+    }
+    payload.update(fields)
+    return payload
 
 
 def _format_result(action: Action, result, *, verbose: bool = False) -> str:
@@ -83,14 +106,13 @@ def _resolve_rules(args: argparse.Namespace):
     """Resolve config, rules path, and filtered rule list for a check command.
 
     Returns:
-        ``(rules, error_exit_code)``. On failure, ``rules`` is None and the
-        second element is the process exit code (always 2).
+        ``(rules, error_message)``. On failure, ``rules`` is None and the
+        second element is a human-readable error.
     """
     try:
         config = load_config(getattr(args, "config", None))
     except ConfigError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return None, 2
+        return None, str(exc)
 
     config = config.merged_with(
         rules_path=args.rules,
@@ -100,34 +122,39 @@ def _resolve_rules(args: argparse.Namespace):
 
     rules_path = config.rules_path
     if rules_path is None:
-        print(
-            "Error: no rules file specified. Pass --rules, set CF_RULES_PATH, "
-            "or provide rules_path in cf.toml.",
-            file=sys.stderr,
+        return None, (
+            "no rules file specified. Pass --rules, set CF_RULES_PATH, "
+            "or provide rules_path in cf.toml."
         )
-        return None, 2
 
     if not rules_path.exists():
-        print(f"Error: rules file not found: {rules_path}", file=sys.stderr)
-        return None, 2
+        return None, f"rules file not found: {rules_path}"
 
     try:
         rules = load_rules(rules_path)
     except Exception as exc:
-        print(f"Error: failed to load rules: {exc}", file=sys.stderr)
-        return None, 2
+        return None, f"failed to load rules: {exc}"
 
     threshold = config.severity_threshold
     if threshold is not None:
         before = len(rules)
         rules = filter_rules_by_severity(rules, threshold)
-        if getattr(args, "verbose", False):
+        if getattr(args, "verbose", False) and not _wants_json(args):
             print(
                 f"  Severity threshold: {threshold.value} "
                 f"({before - len(rules)} rule(s) filtered out)"
             )
 
-    return rules, 0
+    return rules, None
+
+
+def _fail(message: str, *, as_json: bool, command: str) -> int:
+    """Print an error in the requested format and return exit code 2."""
+    if as_json:
+        _emit_json(_json_envelope(command, 2, error=message))
+    else:
+        print(f"Error: {message}", file=sys.stderr)
+    return 2
 
 
 def _exit_code_for_decision(result) -> int:
@@ -143,26 +170,43 @@ def _exit_code_for_decision(result) -> int:
 def cmd_check(args: argparse.Namespace) -> int:
     """Handle the `cf check` subcommand."""
     action_path = Path(args.action)
+    as_json = _wants_json(args)
 
-    rules, err = _resolve_rules(args)
+    rules, rules_error = _resolve_rules(args)
     if rules is None:
-        return err
+        return _fail(rules_error or "failed to load rules", as_json=as_json, command="check")
 
     if not action_path.exists():
-        print(f"Error: action file not found: {action_path}", file=sys.stderr)
-        return 2
+        return _fail(
+            f"action file not found: {action_path}", as_json=as_json, command="check"
+        )
 
     try:
         action_data = json.loads(action_path.read_text(encoding="utf-8"))
         action = Action.from_dict(action_data)
     except (json.JSONDecodeError, KeyError, ValueError) as exc:
-        print(f"Error: failed to parse action file: {exc}", file=sys.stderr)
-        return 2
+        return _fail(
+            f"failed to parse action file: {exc}", as_json=as_json, command="check"
+        )
 
     result = evaluate(action, rules)
-    print(_format_result(action, result, verbose=args.verbose))
+    exit_code = _exit_code_for_decision(result)
 
-    return _exit_code_for_decision(result)
+    if as_json:
+        _emit_json(
+            _json_envelope(
+                "check",
+                exit_code,
+                decision=result.decision.value,
+                action_file=str(action_path),
+                action=action.to_dict(),
+                result=decision_result_to_dict(result),
+            )
+        )
+    else:
+        print(_format_result(action, result, verbose=args.verbose))
+
+    return exit_code
 
 
 # Decision order used when summarizing a batch (most restrictive first).
@@ -197,6 +241,20 @@ def _format_batch_summary(
     return "\n".join(lines)
 
 
+def _batch_summary_dict(
+    counts: dict[Decision, int], errors: int, total: int
+) -> dict[str, Any]:
+    """Build the machine-readable batch summary object."""
+    return {
+        "total": total,
+        "allow": counts.get(Decision.ALLOW, 0),
+        "block": counts.get(Decision.BLOCK, 0),
+        "redact": counts.get(Decision.REDACT, 0),
+        "require_consent": counts.get(Decision.REQUIRE_CONSENT, 0),
+        "errors": errors,
+    }
+
+
 def cmd_check_batch(args: argparse.Namespace) -> int:
     """Handle the ``cf check-batch`` subcommand.
 
@@ -211,45 +269,74 @@ def cmd_check_batch(args: argparse.Namespace) -> int:
     * 2 — config/rules error, empty/missing directory, or any parse failure
     """
     directory = Path(args.directory)
+    as_json = _wants_json(args)
 
     if not directory.exists():
-        print(f"Error: directory not found: {directory}", file=sys.stderr)
-        return 2
+        return _fail(
+            f"directory not found: {directory}", as_json=as_json, command="check-batch"
+        )
     if not directory.is_dir():
-        print(f"Error: not a directory: {directory}", file=sys.stderr)
-        return 2
+        return _fail(
+            f"not a directory: {directory}", as_json=as_json, command="check-batch"
+        )
 
-    rules, err = _resolve_rules(args)
+    rules, rules_error = _resolve_rules(args)
     if rules is None:
-        return err
+        return _fail(
+            rules_error or "failed to load rules", as_json=as_json, command="check-batch"
+        )
 
     action_files = _discover_action_files(directory)
     if not action_files:
-        print(
-            f"Error: no *.json action files found in {directory}",
-            file=sys.stderr,
+        return _fail(
+            f"no *.json action files found in {directory}",
+            as_json=as_json,
+            command="check-batch",
         )
-        return 2
 
     counts: dict[Decision, int] = {d: 0 for d in Decision}
     errors = 0
     had_block_or_consent = False
     had_redact = False
+    json_results: list[dict[str, Any]] = []
 
     for action_path in action_files:
-        print(f"--- {action_path.name} ---")
+        if not as_json:
+            print(f"--- {action_path.name} ---")
         try:
             action_data = json.loads(action_path.read_text(encoding="utf-8"))
             action = Action.from_dict(action_data)
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
             errors += 1
-            print(f"  Error: failed to parse action file: {exc}")
-            print()
+            message = f"failed to parse action file: {exc}"
+            if as_json:
+                json_results.append(
+                    {
+                        "action_file": action_path.name,
+                        "error": message,
+                        "exit_code": 2,
+                    }
+                )
+            else:
+                print(f"  Error: {message}")
+                print()
             continue
 
         result = evaluate(action, rules)
-        print(_format_result(action, result, verbose=args.verbose))
-        print()
+        file_exit = _exit_code_for_decision(result)
+
+        if as_json:
+            json_results.append(
+                {
+                    "action_file": action_path.name,
+                    "decision": result.decision.value,
+                    "exit_code": file_exit,
+                    "result": decision_result_to_dict(result),
+                }
+            )
+        else:
+            print(_format_result(action, result, verbose=args.verbose))
+            print()
 
         counts[result.decision] += 1
         if result.is_blocked or result.requires_consent:
@@ -257,16 +344,30 @@ def cmd_check_batch(args: argparse.Namespace) -> int:
         elif result.is_redacted:
             had_redact = True
 
-    print(_format_batch_summary(counts, errors, len(action_files)))
-
     # Parse failures mean the batch is incomplete — that outranks decision codes.
     if errors:
-        return 2
-    if had_block_or_consent:
-        return 1
-    if had_redact:
-        return 3
-    return 0
+        exit_code = 2
+    elif had_block_or_consent:
+        exit_code = 1
+    elif had_redact:
+        exit_code = 3
+    else:
+        exit_code = 0
+
+    if as_json:
+        _emit_json(
+            _json_envelope(
+                "check-batch",
+                exit_code,
+                directory=str(directory),
+                summary=_batch_summary_dict(counts, errors, len(action_files)),
+                results=json_results,
+            )
+        )
+    else:
+        print(_format_batch_summary(counts, errors, len(action_files)))
+
+    return exit_code
 
 
 def cmd_serve_demo(args: argparse.Namespace) -> int:
@@ -448,6 +549,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Show detailed output.",
     )
+    check_parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format. json emits a stable machine-readable object for CI.",
+    )
     check_parser.set_defaults(func=cmd_check)
 
     # check-batch subcommand
@@ -479,6 +586,12 @@ def main(argv: list[str] | None = None) -> int:
         "--verbose", "-v",
         action="store_true",
         help="Show detailed output per action.",
+    )
+    batch_parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format. json emits a stable machine-readable object for CI.",
     )
     batch_parser.set_defaults(func=cmd_check_batch)
 
