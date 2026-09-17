@@ -14,6 +14,19 @@ _DECISION_PRIORITY: dict[Decision, int] = {
 }
 
 
+def _resolve_deciding_rule(
+    matched_sorted: list[Rule], final_decision: Decision
+) -> Rule | None:
+    """Pick the highest-priority matched rule that proposed the final decision.
+
+    ``matched_sorted`` must already be ordered by priority (descending).
+    """
+    for rule in matched_sorted:
+        if rule.decision == final_decision:
+            return rule
+    return None
+
+
 def evaluate(action: Action, rules: list[Rule]) -> DecisionResult:
     """Evaluate an action against a set of compliance rules.
 
@@ -24,7 +37,8 @@ def evaluate(action: Action, rules: list[Rule]) -> DecisionResult:
         rules: List of compliance rules to check against.
 
     Returns:
-        DecisionResult with the final decision, matched rules, and hints.
+        DecisionResult with the final decision, matched rules, deciding rule,
+        overridden rules, and remediation hints.
     """
     matched = [r for r in rules if r.applies_to(action)]
 
@@ -45,6 +59,15 @@ def evaluate(action: Action, rules: list[Rule]) -> DecisionResult:
         key=lambda d: _DECISION_PRIORITY[d],
     )
 
+    deciding = _resolve_deciding_rule(matched_sorted, final_decision)
+    overridden = tuple(
+        r
+        for r in matched_sorted
+        if deciding is not None
+        and r is not deciding
+        and _DECISION_PRIORITY[r.decision] > _DECISION_PRIORITY[final_decision]
+    )
+
     hints = tuple(
         r.remediation for r in matched_sorted if r.remediation
     )
@@ -59,4 +82,6 @@ def evaluate(action: Action, rules: list[Rule]) -> DecisionResult:
         remediation_hints=hints,
         action=action,
         redacted_action=redacted,
+        deciding_rule=deciding,
+        overridden_rules=overridden,
     )

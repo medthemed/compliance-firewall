@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `DecisionResult.deciding_rule` and `DecisionResult.overridden_rules` identify
+  which matched rule produced the final decision and which softer matches lost
+- `DecisionResult.explain()` returns a one-line operator-facing explanation
+- `ComplianceError` base exception; `ActionBlockedError` and
+  `ConsentRequiredError` now subclass it (existing handlers still work)
+- `REDACTED_PLACEHOLDER` re-exported from the package root
+- CLI `--verbose` prints the explanation, deciding rule, and overridden matches
+- End-to-end integration tests covering allow / block / redact / require_consent
+  through both `ComplianceProxy` and `cf check` against a real rules file
+
+### Changed
+- Matched-rules CLI output marks the deciding rule with `*`
+
 ## [0.1.1] - 2026-09-17
 
 ### Added

@@ -14,6 +14,7 @@ from compliance_firewall.models import (
 )
 from compliance_firewall.proxy import (
     ActionBlockedError,
+    ComplianceError,
     ComplianceProxy,
     ConsentRequiredError,
 )
@@ -251,3 +252,55 @@ class TestProxyCheck:
         result = proxy.check(action)
         assert result.is_blocked
         assert len(calls) == 0
+
+
+class TestComplianceErrorBase:
+    """ComplianceError is a shared base for block and consent failures."""
+
+    def test_blocked_is_compliance_error(self):
+        proxy = ComplianceProxy(rules=[_block_rule()], executor=lambda a: None)
+        action = Action(
+            action_type=ActionType.DATA_EXPORT,
+            destination_region="US",
+            contains_pii=True,
+        )
+        with pytest.raises(ComplianceError) as exc_info:
+            proxy.execute(action)
+        assert isinstance(exc_info.value, ActionBlockedError)
+        assert exc_info.value.result is not None
+
+    def test_consent_is_compliance_error(self):
+        proxy = ComplianceProxy(rules=[_consent_rule()], executor=lambda a: None)
+        action = Action(
+            action_type=ActionType.DATA_EXPORT,
+            contains_pii=True,
+            data_categories=["email"],
+            purpose="marketing",
+        )
+        with pytest.raises(ComplianceError) as exc_info:
+            proxy.execute(action)
+        assert isinstance(exc_info.value, ConsentRequiredError)
+
+    def test_except_compliance_error_catches_both(self):
+        caught: list[str] = []
+        proxy = ComplianceProxy(
+            rules=[_block_rule(), _consent_rule()],
+            executor=lambda a: None,
+        )
+        block_action = Action(
+            action_type=ActionType.DATA_EXPORT,
+            destination_region="US",
+            contains_pii=True,
+        )
+        consent_action = Action(
+            action_type=ActionType.DATA_EXPORT,
+            contains_pii=True,
+            data_categories=["email"],
+            purpose="marketing",
+        )
+        for action in (block_action, consent_action):
+            try:
+                proxy.execute(action)
+            except ComplianceError as exc:
+                caught.append(exc.result.decision.value)
+        assert caught == ["block", "require_consent"]

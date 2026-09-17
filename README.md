@@ -52,13 +52,27 @@ Output:
   Purpose: analytics
   PII: yes (email, name, phone)
   Matched rules (2):
-    - [critical] GDPR-ART44 (EU): No PII transfer to non-adequate third countries
-      Citation: GDPR Art. 44 — General principle for transfers
+    * [critical] GDPR-ART44 (EU): No PII transfer to non-adequate third countries
+        Citation: GDPR Art. 44 — General principle for transfers
     - [critical] CHINA-PIPL-LOCALIZE (CN): PII collected in China must not be exported...
-      Citation: PIPL Art. 38
+        Citation: PIPL Art. 38
   Remediation:
     → Use an EU-based processor or obtain explicit consent under Art. 49(1)(a).
     → Complete CAC security assessment before cross-border transfer.
+```
+
+Add `--verbose` to see which rule decided the outcome and which softer matches were overridden:
+
+```bash
+cf check examples/actions/pii_export_us.json --rules examples/rules.yaml --verbose
+```
+
+```
+  ...
+  Explanation: block by GDPR-ART44 (critical); overridden: CCPA-OPTEVENT (require_consent).
+  Deciding rule: GDPR-ART44 → block (critical)
+  Overridden rules:
+    - CCPA-OPTEVENT proposed require_consent (high)
 ```
 
 ### Run the local demo
@@ -72,7 +86,7 @@ Runs three scenarios (block, allow, redact) with no network required.
 ### Use as a library
 
 ```python
-from compliance_firewall import Action, ComplianceProxy, load_rules
+from compliance_firewall import Action, ComplianceError, ComplianceProxy, load_rules
 
 rules = load_rules("examples/rules.yaml")
 
@@ -92,9 +106,13 @@ action = Action.from_dict({
 
 try:
     result = proxy.execute(action)
-except Exception as e:
-    print(f"Blocked: {e}")
+except ComplianceError as e:
+    print(f"Denied ({e.result.decision.value}): {e.result.explain()}")
 ```
+
+`ActionBlockedError` and `ConsentRequiredError` both subclass `ComplianceError`
+and carry the full `DecisionResult` on `.result`, including `deciding_rule`,
+`overridden_rules`, and `explain()`.
 
 ## Action Model
 
@@ -158,6 +176,17 @@ When multiple rules match, the most restrictive decision wins: `block > require_
 | **redact** | PII fields replaced with `[REDACTED]`; scrubbed action executed |
 | **require_consent** | `ConsentRequiredError` raised; executor never called |
 
+### Decision explanations
+
+`DecisionResult` records *how* the outcome was reached:
+
+- `deciding_rule` — the matched rule whose decision won (highest priority among the most restrictive)
+- `overridden_rules` — matched rules that proposed a softer decision
+- `explain()` — one-line summary, e.g. `block by GDPR-ART44 (critical); overridden: CCPA-OPTEVENT (require_consent).`
+
+When no rules match, `deciding_rule` is `None` and `explain()` returns
+`No rules matched; action allowed.`
+
 ## Redaction
 
 When a rule fires with `decision: redact`, matching payload fields are replaced with `[REDACTED]`:
@@ -172,6 +201,8 @@ When a rule fires with `decision: redact`, matching payload fields are replaced 
 cf check <action.json> --rules <rules.yaml> [--verbose]
     Evaluate an action file against a rules file.
     Exit codes: 0=allow, 1=block/consent, 3=redacted, 2=error
+    --verbose prints the deciding rule, overridden matches, and a one-line
+    explanation.
 
 cf serve-demo
     Run a self-contained demo with built-in scenarios (no network).

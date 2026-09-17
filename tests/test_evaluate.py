@@ -377,3 +377,85 @@ class TestSourceRegionMatching:
         assert result.is_redacted
         assert result.redacted_action is not None
         assert result.redacted_action.source_region == "CN"
+
+
+class TestDecisionExplanation:
+    """deciding_rule, overridden_rules, and explain() (issue #3)."""
+
+    def _action(self, **kwargs) -> Action:
+        defaults = {
+            "action_type": ActionType.DATA_EXPORT,
+            "destination_region": "US",
+            "contains_pii": True,
+            "data_categories": ["email"],
+            "purpose": "marketing",
+        }
+        defaults.update(kwargs)
+        return Action(**defaults)
+
+    def test_no_match_means_no_deciding_rule(self):
+        result = evaluate(self._action(), [])
+        assert result.deciding_rule is None
+        assert result.overridden_rules == ()
+        assert result.explain() == "No rules matched; action allowed."
+
+    def test_single_rule_is_deciding(self):
+        rule = _make_rule(id="ONLY", decision=Decision.BLOCK, priority=10)
+        result = evaluate(self._action(), [rule])
+        assert result.deciding_rule is not None
+        assert result.deciding_rule.id == "ONLY"
+        assert result.overridden_rules == ()
+        assert result.explain() == "block by ONLY (critical)."
+
+    def test_same_decision_multi_rule_picks_highest_priority(self):
+        low = _make_rule(id="LOW", decision=Decision.BLOCK, priority=1)
+        high = _make_rule(id="HIGH", decision=Decision.BLOCK, priority=100)
+        result = evaluate(self._action(), [low, high])
+        assert result.deciding_rule.id == "HIGH"
+        # Same decision → nothing overridden
+        assert result.overridden_rules == ()
+        assert "overridden" not in result.explain()
+
+    def test_mixed_decisions_block_overrides_soft_matches(self):
+        block = _make_rule(id="BLOCK-R", decision=Decision.BLOCK, priority=100)
+        consent = _make_rule(
+            id="CONSENT-R",
+            decision=Decision.REQUIRE_CONSENT,
+            priority=50,
+            purposes=("marketing",),
+        )
+        redact = _make_rule(
+            id="REDACT-R",
+            decision=Decision.REDACT,
+            priority=10,
+            destination_regions=None,
+        )
+        result = evaluate(self._action(), [redact, consent, block])
+        assert result.decision == Decision.BLOCK
+        assert result.deciding_rule.id == "BLOCK-R"
+        overridden_ids = [r.id for r in result.overridden_rules]
+        assert "CONSENT-R" in overridden_ids
+        assert "REDACT-R" in overridden_ids
+        assert "BLOCK-R" not in overridden_ids
+        explanation = result.explain()
+        assert explanation.startswith("block by BLOCK-R (critical)")
+        assert "overridden:" in explanation
+        assert "CONSENT-R (require_consent)" in explanation
+        assert "REDACT-R (redact)" in explanation
+
+    def test_consent_overrides_redact(self):
+        consent = _make_rule(
+            id="C", decision=Decision.REQUIRE_CONSENT, priority=50
+        )
+        redact = _make_rule(
+            id="R",
+            decision=Decision.REDACT,
+            priority=10,
+            destination_regions=None,
+        )
+        result = evaluate(self._action(), [redact, consent])
+        assert result.deciding_rule.id == "C"
+        assert [r.id for r in result.overridden_rules] == ["R"]
+        assert result.explain() == (
+            "require_consent by C (critical); overridden: R (redact)."
+        )

@@ -44,7 +44,19 @@ src/compliance_firewall/
    - `REQUIRE_CONSENT` → raises `ConsentRequiredError`; executor never called.
    - `REDACT` → calls `redact_action(action)`, then executes the scrubbed action.
    - `ALLOW` → executes the original action.
+
+   Both errors subclass `ComplianceError` and carry the `DecisionResult` on `.result`.
 6. Every evaluation is appended to `proxy.audit_log`.
+
+### Decision explanation
+
+After resolution the evaluator records:
+
+- `deciding_rule` — the highest-priority matched rule that proposed the final decision
+- `overridden_rules` — matched rules that proposed a softer decision
+
+`DecisionResult.explain()` formats this as a single operator-facing sentence.
+The CLI prints it under `--verbose`.
 
 ## Rule Schema
 

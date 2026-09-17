@@ -9,28 +9,44 @@ from .evaluate import evaluate
 from .models import Action, Decision, DecisionResult, Rule
 
 
-class ActionBlockedError(Exception):
+class ComplianceError(Exception):
+    """Base class for all compliance-firewall failures.
+
+    Catch this to handle any compliance denial (block or consent) uniformly.
+    Subclasses attach the full :class:`DecisionResult` on ``.result``.
+    """
+
+    def __init__(self, result: DecisionResult, message: str | None = None):
+        self.result = result
+        super().__init__(message or self._default_message(result))
+
+    @staticmethod
+    def _default_message(result: DecisionResult) -> str:
+        rules_str = ", ".join(r.id for r in result.matched_rules) or "none"
+        return f"Compliance check failed ({result.decision.value}): {rules_str}"
+
+
+class ActionBlockedError(ComplianceError):
     """Raised when a blocked action is attempted through the proxy."""
 
     def __init__(self, result: DecisionResult):
-        self.result = result
         rules_str = ", ".join(r.id for r in result.matched_rules)
         hints = "; ".join(result.remediation_hints) if result.remediation_hints else ""
         msg = f"Action blocked by compliance rules: {rules_str}"
         if hints:
             msg += f". Remediation: {hints}"
-        super().__init__(msg)
+        super().__init__(result, msg)
 
 
-class ConsentRequiredError(Exception):
+class ConsentRequiredError(ComplianceError):
     """Raised when an action requires explicit consent."""
 
     def __init__(self, result: DecisionResult):
-        self.result = result
         rules_str = ", ".join(r.id for r in result.matched_rules)
         super().__init__(
+            result,
             f"Action requires consent (matched rules: {rules_str}). "
-            "Obtain user consent before retrying."
+            "Obtain user consent before retrying.",
         )
 
 
