@@ -34,7 +34,7 @@ src/compliance_firewall/
 
 ## Data Flow
 
-1. **Agent** constructs an `Action` with metadata (type, region, PII flag, categories, payload).
+1. **Agent** constructs an `Action` with metadata (type, source/destination region, PII flag, categories, payload).
 2. **ComplianceProxy.execute(action)** calls `evaluate(action, rules)`.
 3. **Evaluator** runs each rule's `MatchCondition.matches(action)`. Matched rules are collected.
 4. **Decision resolution**: the most restrictive decision wins:
@@ -58,6 +58,7 @@ rules:
       destination_regions: [US, CN, RU, IN]
       # All optional; unspecified fields are wildcards
       # action_types: [http_request, db_query]
+      # source_regions: [CN, EU]          # where the data was collected
       # data_categories: [email, phone]
       # purposes: [marketing]
     decision: block          # allow | block | redact | require_consent
@@ -71,6 +72,8 @@ rules:
 
 - All specified conditions use AND logic (every condition must match).
 - `data_categories` uses OR logic within itself (any category match suffices).
+- `source_regions` matches the action's `source_region` (data origin). An action
+  with no `source_region` only matches rules that leave `source_regions` unset.
 - Unspecified fields are wildcards (match anything).
 
 ## Decision Priority

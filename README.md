@@ -41,6 +41,7 @@ Output:
 ```
 ✗ Decision: BLOCK
   Action: data_export
+  Source: CN
   Destination: US
   Purpose: analytics
   PII: yes (email, name, phone)
@@ -97,6 +98,7 @@ Every agent action carries structured metadata:
 |---|---|---|
 | `action_type` | `http_request` \| `db_query` \| `data_export` \| `tool_call` | What the agent wants to do |
 | `destination_region` | string | ISO region code (`US`, `EU`, `CN`, ...) |
+| `source_region` | string | ISO region code where the data was collected (`CN`, `EU`, ...). Empty = unspecified |
 | `contains_pii` | bool | Whether payload has PII |
 | `purpose` | string | Declared purpose (`analytics`, `marketing`, ...) |
 | `data_categories` | list[string] | Categories present (`email`, `phone`, ...) |
@@ -119,6 +121,24 @@ Rules live in YAML or JSON. Each rule has:
   citation: "GDPR Art. 44"
   remediation: "Use an EU-based processor."
   priority: 100
+```
+
+Origin-based rules can also filter on `source_regions`, which matches the
+`source_region` field of the action. This is how laws such as PIPL are scoped
+to data collected in a particular jurisdiction:
+
+```yaml
+- id: CHINA-PIPL-LOCALIZE
+  jurisdiction: CN
+  description: "PII collected in China must not be exported to non-local processors"
+  match:
+    source_regions: [CN]
+    destination_regions: [US]
+    contains_pii: true
+  decision: block
+  severity: critical
+  citation: "PIPL Art. 38"
+  priority: 90
 ```
 
 When multiple rules match, the most restrictive decision wins: `block > require_consent > redact > allow`.
@@ -154,7 +174,8 @@ cf serve-demo
 ## Example Files
 
 - `examples/rules.yaml` — GDPR, CCPA, PIPL, and internal policy rules
-- `examples/actions/pii_export_us.json` — PII export to US (blocks)
+- `examples/actions/pii_export_us.json` — PII collected in CN, exported to US (blocks)
+- `examples/actions/pii_export_us_eu_origin.json` — PII collected in EU, exported to US (blocks via GDPR only)
 - `examples/actions/clean_action.json` — Clean HTTP request (allows)
 - `examples/actions/tool_call_phone.json` — Tool call with phone (redacts)
 - `examples/actions/marketing_email_eu.json` — Marketing email (requires consent)
