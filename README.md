@@ -8,6 +8,18 @@ Built for teams deploying AI agents that handle regulated data (GDPR, CCPA, PIPL
 
 Autonomous agents can inadvertently violate privacy and AI regulations — exporting PII to non-adequate third countries, calling tools with sensitive fields, or using data beyond its declared purpose. compliance-firewall sits between the agent and its executors, enforcing policy at the action level.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Agent Intent] --> B[Compliance Proxy]
+    B --> C{Rule Engine}
+    C -->|allow| D[Executor]
+    C -->|block| E[ActionBlockedError]
+    C -->|redact| F[Scrubbed Action] --> D
+    C -->|require_consent| G[ConsentRequiredError]
+```
+
 ## Install
 
 ```bash

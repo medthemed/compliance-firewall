@@ -66,15 +66,13 @@ rules:
 
   - id: CHINA-PIPL-LOCALIZE
     jurisdiction: CN
-    description: "PII collected in China must not be exported without security assessment"
+    description: "PII must not be exported to non-local processors without a security assessment"
     match:
       destination_regions:
         - US
-        - EU
-        - IN
       contains_pii: true
     decision: block
     severity: critical
     citation: "PIPL Art. 38"
-    remediation: "Complete CAC security assessment before cross-border transfer."
+    remediation: "Complete a security assessment before transferring PII to overseas processors."
     priority: 90
