@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-17
+
 ### Added
 - `Action.source_region` field and `MatchCondition.source_regions` match condition
   for origin-based jurisdiction rules (e.g. PIPL scoped to data collected in China)
