@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-20
+
+### Added
+- Draft-07 JSON Schema documents for actions and rule databases:
+  `schemas/action.schema.json` and `schemas/rules.schema.json`, also shipped
+  as package data under `compliance_firewall/schema_files/`
+- `ACTION_SCHEMA`, `RULES_SCHEMA`, `schema_path`, `validate_action_data`,
+  and `validate_rules_data` exported from the package root
+- Lightweight stdlib structural validators (no `jsonschema` dependency)
+- `cf check --format json` and `cf check-batch --format json` emit a stable
+  machine-readable envelope with `schema_version`, decision details, matched
+  rules, and (for batch) a summary plus per-file results
+- `decision_result_to_dict` and `rule_to_dict` for library integrations
+
+### Changed
+- JSON-mode errors are reported as `error` fields on stdout so CI parsers
+  always receive a single JSON object; process exit codes are unchanged
+- Human-readable `text` output remains the default and is unchanged
+
 ## [0.4.0] - 2026-09-19
 
 ### Added
