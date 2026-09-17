@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for origin-based jurisdiction rules (e.g. PIPL scoped to data collected in China)
 - Example action `pii_export_us_eu_origin.json` showing a non-China origin export
 - CLI now prints the source region when present
+- `docs/RULE_AUTHORING.md` — field-by-field guide to writing compliance rules
+- CI, license, and Python version badges in the README
 
 ### Changed
 - `CHINA-PIPL-LOCALIZE` example rule now matches on `source_regions: [CN]` so it

@@ -1,8 +1,14 @@
 # compliance-firewall
 
+[![CI](https://github.com/medthemed/compliance-firewall/actions/workflows/ci.yml/badge.svg)](https://github.com/medthemed/compliance-firewall/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+
 A compliance proxy for autonomous agents. Intercepts intended actions and evaluates them against a rule database, producing **allow**, **block**, **redact**, or **require_consent** decisions before anything executes.
 
 Built for teams deploying AI agents that handle regulated data (GDPR, CCPA, PIPL, etc.).
+
+**Writing rules?** See the [Rule Authoring Guide](docs/RULE_AUTHORING.md).
 
 ## Why
 
@@ -206,6 +212,11 @@ Any source producing the same dict schema works: HTTP API, S3, database, etc.
 ## Architecture
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full design details.
+
+## Writing rules
+
+See [docs/RULE_AUTHORING.md](docs/RULE_AUTHORING.md) for a field-by-field guide,
+match semantics, decision selection, and common pitfalls.
 
 ## License
 
