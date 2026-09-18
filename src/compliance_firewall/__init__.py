@@ -19,7 +19,7 @@ from .proxy import (
 from .redact import REDACTED_PLACEHOLDER, redact_action, redact_payload
 from .rules import load_rules, load_rules_from_dict
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "Action",
