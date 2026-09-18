@@ -1,0 +1,9 @@
+# Example compliance-firewall configuration.
+# Copy to the project root as cf.toml, or pass with `cf check --config`.
+
+# Default rules file used when --rules is not passed.
+rules_path = "examples/rules.yaml"
+
+# Optional: ignore rules below this severity.
+# One of: low | medium | high | critical
+# severity_threshold = "high"

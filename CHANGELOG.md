@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `cf.toml` / `.cf.toml` / `compliance-firewall.toml` project config with
+  `rules_path` and `severity_threshold`
+- Environment variables `CF_RULES_PATH`, `CF_SEVERITY_THRESHOLD`, and `CF_CONFIG`
+- `cf check --config` for an explicit config file; auto-discovers `cf.toml` in cwd
+- `cf check --severity-threshold` to drop rules below a named severity
+- `load_config`, `load_config_file`, `parse_severity`, and
+  `filter_rules_by_severity` exported from the package root
+- `ConfigError` for configuration failures
+- Example config at `examples/cf.toml` and README configuration section
+
+### Changed
+- `cf check --rules` is now optional when a config file or `CF_RULES_PATH`
+  supplies a default path
+
 ## [0.2.0] - 2026-09-18
 
 ### Added

@@ -198,15 +198,41 @@ When a rule fires with `decision: redact`, matching payload fields are replaced 
 ## CLI Reference
 
 ```
-cf check <action.json> --rules <rules.yaml> [--verbose]
+cf check <action.json> [--rules <rules.yaml>] [--config <cf.toml>]
+         [--severity-threshold low|medium|high|critical] [--verbose]
     Evaluate an action file against a rules file.
     Exit codes: 0=allow, 1=block/consent, 3=redacted, 2=error
     --verbose prints the deciding rule, overridden matches, and a one-line
     explanation.
+    --rules is optional when cf.toml or CF_RULES_PATH supplies a default.
 
 cf serve-demo
     Run a self-contained demo with built-in scenarios (no network).
 ```
+
+## Configuration
+
+Project defaults can live in `cf.toml` (or `.cf.toml` / `compliance-firewall.toml`)
+in the working directory, or be pointed at with `--config`:
+
+```toml
+rules_path = "examples/rules.yaml"
+severity_threshold = "high"   # optional: drop rules below this severity
+```
+
+Environment variables:
+
+| Variable | Effect |
+|---|---|
+| `CF_RULES_PATH` | Default rules file |
+| `CF_SEVERITY_THRESHOLD` | Minimum rule severity (`low`/`medium`/`high`/`critical`) |
+| `CF_CONFIG` | Path to a config file |
+
+Precedence (highest wins): CLI flags → environment variables → config file → none.
+`severity_threshold` filters rules out of evaluation entirely, which is useful
+for local experiments where you only care about high/critical findings.
+
+See [examples/cf.toml](examples/cf.toml) for a starter file.
 
 ## Example Files
 
