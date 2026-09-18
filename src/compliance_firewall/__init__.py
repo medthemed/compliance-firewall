@@ -1,5 +1,13 @@
 """compliance-firewall: intercept agent actions against compliance rules."""
 
+from .config import (
+    Config,
+    ConfigError,
+    filter_rules_by_severity,
+    load_config,
+    load_config_file,
+    parse_severity,
+)
 from .evaluate import evaluate
 from .models import (
     Action,
@@ -27,6 +35,8 @@ __all__ = [
     "ActionType",
     "ComplianceError",
     "ComplianceProxy",
+    "Config",
+    "ConfigError",
     "ConsentRequiredError",
     "Decision",
     "DecisionResult",
@@ -35,8 +45,12 @@ __all__ = [
     "Rule",
     "Severity",
     "evaluate",
+    "filter_rules_by_severity",
+    "load_config",
+    "load_config_file",
     "load_rules",
     "load_rules_from_dict",
+    "parse_severity",
     "redact_action",
     "redact_payload",
 ]
