@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "compliance-firewall"
-version = "0.2.0"
+version = "0.3.0"
 description = "Compliance proxy that intercepts agent actions and allows, blocks, or transforms them against a rule database."
 readme = "README.md"
 license = {text = "MIT"}
